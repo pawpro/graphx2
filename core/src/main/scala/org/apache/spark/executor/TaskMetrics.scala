@@ -110,9 +110,26 @@ class ShuffleReadMetrics extends Serializable {
   var remoteFetchTime: Long = _
 
   /**
+   * Time (in milliseconds) spent reading remote shuffle blocks from disk.  As with the above
+   * metric, this aggregates time time across all input blocks, so includes times that may have
+   * occurred in parallel.
+   */
+  var remoteDiskReadTime: Long = _
+
+  /**
    * Total number of remote bytes read from the shuffle by this task
    */
   var remoteBytesRead: Long = _
+
+  /**
+   * Time taken (in milliseconds) to fetch blocks stored locally.
+   */
+  var localReadTime: Long = _
+
+  /**
+   * Shuffle bytes read locally.
+   */
+  var localReadBytes: Long = _
 }
 
 class ShuffleWriteMetrics extends Serializable {

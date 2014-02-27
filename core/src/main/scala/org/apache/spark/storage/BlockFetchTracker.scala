@@ -24,4 +24,7 @@ private[spark] trait BlockFetchTracker {
   def remoteFetchTime : Long
   def fetchWaitTime: Long
   def remoteBytesRead : Long
+  def remoteDiskReadTime: Long
+  def localReadTime: Long
+  def localReadBytes: Long
 }
