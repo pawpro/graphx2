@@ -84,7 +84,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
       i
     }
 
-    val d = sc.parallelize(0 to 1e4.toInt, 64).map{i => w(i)}
+    val d = sc.parallelize(0 to 1e4.toInt, 64).map{i => w(i)}.cache()
     d.count()
     assert(sc.dagScheduler.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     listener.stageInfos.size should be (1)
@@ -119,6 +119,8 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
       stageInfo.taskInfos.foreach { case (taskInfo, taskMetrics) =>
         taskMetrics.resultSize should be > (0l)
         if (stageInfo.rddName == d2.name || stageInfo.rddName == d3.name) {
+          taskMetrics.inputMetrics should be ('defined)
+          taskMetrics.inputMetrics.get.bytesRead should be > (0l)
           taskMetrics.shuffleWriteMetrics should be ('defined)
           taskMetrics.shuffleWriteMetrics.get.shuffleBytesWritten should be > (0l)
         }

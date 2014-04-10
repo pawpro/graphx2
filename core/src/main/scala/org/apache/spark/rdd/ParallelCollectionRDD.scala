@@ -25,8 +25,9 @@ import scala.reflect.ClassTag
 import org.apache.spark._
 import java.io._
 import scala.Serializable
+import org.apache.spark.executor.{DataReadMethod, InputMetrics}
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SizeEstimator, Utils}
 
 private[spark] class ParallelCollectionPartition[T: ClassTag](
     var rddId: Long,
@@ -97,7 +98,14 @@ private[spark] class ParallelCollectionRDD[T: ClassTag](
   }
 
   override def compute(s: Partition, context: TaskContext) = {
-    new InterruptibleIterator(context, s.asInstanceOf[ParallelCollectionPartition[T]].iterator)
+    val parallelCollectionsPartition = s.asInstanceOf[ParallelCollectionPartition[T]]
+
+    // Set the input metrics for the task.
+    val inputMetrics = new InputMetrics(DataReadMethod.Memory, 0)
+    inputMetrics.bytesRead = SizeEstimator.estimate(parallelCollectionsPartition.values)
+    context.taskMetrics.inputMetrics = Some(inputMetrics)
+
+    new InterruptibleIterator(context, parallelCollectionsPartition.iterator)
   }
 
   override def getPreferredLocations(s: Partition): Seq[String] = {

@@ -18,8 +18,29 @@
 package org.apache.spark
 
 import scala.collection.mutable.{ArrayBuffer, HashSet}
-import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, RDDBlockId}
+
+import org.apache.spark.executor.InputMetrics
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.{BlockId, BlockManager, BlockResult, RDDBlockId, StorageLevel}
+
+/**
+ * Wraps an iterator and times hasNext() and next() calls.  Sets the entries in the given
+ * InputMetrics accordingly.
+ */
+private class ReadTimingIterator[T](val delegate: Iterator[T], val metrics: InputMetrics)
+    extends Iterator[T] {
+
+  override def next(): T = {
+    val startTime = System.nanoTime()
+    val nextItem = delegate.next()
+    metrics.readTime += System.nanoTime() - startTime
+    nextItem
+  }
+
+  override def hasNext(): Boolean = {
+    delegate.hasNext
+  }
+}
 
 
 /** Spark class responsible for passing RDDs split contents to the BlockManager and making
@@ -36,9 +57,9 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
     val key = RDDBlockId(rdd.id, split.index)
     logDebug("Looking for partition " + key)
     blockManager.get(key) match {
-      case Some(values) =>
+      case Some(blockResult) =>
         // Partition is already materialized, so just return its values
-        new InterruptibleIterator(context, values.asInstanceOf[Iterator[T]])
+        setMetricsAndGetIterator(context, blockResult)
 
       case None =>
         // Mark the split as loading (unless someone else marks it first)
@@ -55,8 +76,8 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
             // because it's unlikely that two threads would work on the same RDD partition. One
             // downside of the current code is that threads wait serially if this does happen.
             blockManager.get(key) match {
-              case Some(values) =>
-                return new InterruptibleIterator(context, values.asInstanceOf[Iterator[T]])
+              case Some(blockResult) =>
+                setMetricsAndGetIterator(context, blockResult)
               case None =>
                 logInfo("Whoever was loading %s failed; we'll try it ourselves".format(key))
                 loading.add(key)
@@ -82,5 +103,15 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           }
         }
     }
+  }
+
+  private def setMetricsAndGetIterator[T](
+      context: TaskContext,
+      blockResult: BlockResult) : InterruptibleIterator[T] = {
+    context.taskMetrics.inputMetrics = Some(blockResult.inputMetrics)
+    val readTimingIterator = new ReadTimingIterator(
+      blockResult.data.asInstanceOf[Iterator[T]],
+      blockResult.inputMetrics)
+    new InterruptibleIterator(context, readTimingIterator)
   }
 }

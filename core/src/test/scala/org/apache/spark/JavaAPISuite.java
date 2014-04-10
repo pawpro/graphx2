@@ -23,6 +23,7 @@ import java.io.Serializable;
 import java.util.*;
 
 import com.google.common.base.Optional;
+import org.apache.spark.executor.TaskMetrics;
 import scala.Tuple2;
 
 import com.google.common.base.Charsets;
@@ -533,7 +534,7 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void iterator() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5), 2);
-    TaskContext context = new TaskContext(0, 0, 0, false, false, null);
+    TaskContext context = new TaskContext(0, 0, 0, false, false, new TaskMetrics());
     Assert.assertEquals(1, rdd.iterator(rdd.splits().get(0), context).next().intValue());
   }
 

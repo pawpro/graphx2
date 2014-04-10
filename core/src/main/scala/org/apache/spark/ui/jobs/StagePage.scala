@@ -52,6 +52,8 @@ private[spark] class StagePage(parent: JobProgressUI) {
       val tasks = listener.stageIdToTaskInfos(stageId).toSeq.sortBy(_._1.launchTime)
 
       val numCompleted = tasks.count(_._1.finished)
+      val inputReadBytes = listener.stageIdToInputBytes.getOrElse(stageId, 0L)
+      val hasInputRead = inputReadBytes > 0
       val shuffleReadBytes = listener.stageIdToShuffleRead.getOrElse(stageId, 0L)
       val hasShuffleRead = shuffleReadBytes > 0
       val shuffleWriteBytes = listener.stageIdToShuffleWrite.getOrElse(stageId, 0L)
@@ -100,12 +102,14 @@ private[spark] class StagePage(parent: JobProgressUI) {
       val taskHeaders: Seq[String] =
         Seq("Task Index", "Task ID", "Status", "Locality Level", "Executor", "Launch Time") ++
         Seq("Duration", "GC Time", "Result Ser Time") ++
+        {if (hasInputRead) Seq("Input") else Nil} ++
         {if (hasShuffleRead) Seq("Shuffle Read")  else Nil} ++
         {if (hasShuffleWrite) Seq("Write Time", "Shuffle Write") else Nil} ++
         {if (hasBytesSpilled) Seq("Shuffle Spill (Memory)", "Shuffle Spill (Disk)") else Nil} ++
         Seq("Errors")
 
-      val taskTable = listingTable(taskHeaders, taskRow(hasShuffleRead, hasShuffleWrite, hasBytesSpilled), tasks)
+      val taskTable = listingTable(
+        taskHeaders, taskRow(hasInputRead, hasShuffleRead, hasShuffleWrite, hasBytesSpilled), tasks)
 
       // Excludes tasks which failed and have incomplete metrics
       val validTasks = tasks.filter(t => t._1.status == "SUCCESS" && (t._2.isDefined))
@@ -208,7 +212,8 @@ private[spark] class StagePage(parent: JobProgressUI) {
     }
   }
 
-  def taskRow(shuffleRead: Boolean, shuffleWrite: Boolean, bytesSpilled: Boolean)
+  def taskRow(inputRead: Boolean, shuffleRead: Boolean, shuffleWrite: Boolean,
+              bytesSpilled: Boolean)
              (taskData: (TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])): Seq[Node] = {
     def fmtStackTrace(trace: Seq[StackTraceElement]): Seq[Node] =
       trace.map(e => <span style="display:block;">{e.toString}</span>)
@@ -221,7 +226,11 @@ private[spark] class StagePage(parent: JobProgressUI) {
     val gcTime = metrics.map(m => m.jvmGCTime).getOrElse(0L)
     val serializationTime = metrics.map(m => m.resultSerializationTime).getOrElse(0L)
 
-    val maybeShuffleRead = metrics.flatMap{m => m.shuffleReadMetrics}.map{s => s.remoteBytesRead}
+    val maybeInputRead = metrics.flatMap(m => m.inputMetrics).map(s => s.bytesRead)
+    val inputReadSortable = maybeInputRead.map(_.toString).getOrElse("")
+    val inputReadReadable = maybeInputRead.map(Utils.bytesToString).getOrElse("")
+
+    val maybeShuffleRead = metrics.flatMap(m => m.shuffleReadMetrics).map(s => s.remoteBytesRead)
     val shuffleReadSortable = maybeShuffleRead.map(_.toString).getOrElse("")
     val shuffleReadReadable = maybeShuffleRead.map{Utils.bytesToString(_)}.getOrElse("")
 
@@ -258,10 +267,15 @@ private[spark] class StagePage(parent: JobProgressUI) {
       <td sorttable_customkey={serializationTime.toString}>
         {if (serializationTime > 0) parent.formatDuration(serializationTime) else ""}
       </td>
+      {if (inputRead) {
+      <td sorttable_customkey={inputReadSortable}>
+        {inputReadReadable}
+      </td>
+      }}
       {if (shuffleRead) {
-         <td sorttable_customkey={shuffleReadSortable}>
-           {shuffleReadReadable}
-         </td>
+      <td sorttable_customkey={shuffleReadSortable}>
+        {shuffleReadReadable}
+      </td>
       }}
       {if (shuffleWrite) {
          <td sorttable_customkey={writeTimeSortable}>

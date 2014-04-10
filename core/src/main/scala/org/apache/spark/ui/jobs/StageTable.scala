@@ -49,6 +49,7 @@ private[spark] class StageTable(val stages: Seq[StageInfo], val parent: JobProgr
         <th>Submitted</th>
         <th>Duration</th>
         <th>Tasks: Succeeded/Total</th>
+        <th>Input Bytes</th>
         <th>Shuffle Read</th>
         <th>Shuffle Write</th>
       </thead>
@@ -76,6 +77,12 @@ private[spark] class StageTable(val stages: Seq[StageInfo], val parent: JobProgr
     val submissionTime = s.submissionTime match {
       case Some(t) => WebUI.formatDate(new Date(t))
       case None => "Unknown"
+    }
+
+    val inputBytesSortable = listener.stageIdToInputBytes.getOrElse(s.stageId, 0L)
+    val inputBytes = inputBytesSortable match {
+      case 0 => ""
+      case b => Utils.bytesToString(b)
     }
 
     val shuffleReadSortable = listener.stageIdToShuffleRead.getOrElse(s.stageId, 0L)
@@ -123,6 +130,7 @@ private[spark] class StageTable(val stages: Seq[StageInfo], val parent: JobProgr
       <td class="progress-cell">
         {makeProgressBar(startedTasks, completedTasks, failedTasks, totalTasks)}
       </td>
+      <td sorttable_customekey={inputBytesSortable.toString}>{inputBytes}</td>
       <td sorttable_customekey={shuffleReadSortable.toString}>{shuffleRead}</td>
       <td sorttable_customekey={shuffleWriteSortable.toString}>{shuffleWrite}</td>
     </tr>

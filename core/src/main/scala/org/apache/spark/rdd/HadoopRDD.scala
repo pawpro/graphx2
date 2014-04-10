@@ -30,6 +30,7 @@ import org.apache.hadoop.util.ReflectionUtils
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.{DataReadMethod, InputMetrics}
 import org.apache.spark.util.NextIterator
 
 
@@ -147,6 +148,7 @@ class HadoopRDD[K, V](
 
   override def compute(theSplit: Partition, context: TaskContext) = {
     val iter = new NextIterator[(K, V)] {
+      val startTime = System.currentTimeMillis()
       val split = theSplit.asInstanceOf[HadoopPartition]
       logInfo("Input split: " + split.inputSplit)
       var reader: RecordReader[K, V] = null
@@ -155,18 +157,39 @@ class HadoopRDD[K, V](
       val inputFormat = getInputFormat(jobConf)
       reader = inputFormat.getRecordReader(split.inputSplit.value, jobConf, Reporter.NULL)
 
+      val inputMetrics = new InputMetrics(DataReadMethod.Hdfs,
+        System.currentTimeMillis() - startTime)
+
+      var totalBytesRead = 0L
+      var totalReadTimeNanos = 0L
+
       // Register an on-task-completion callback to close the input stream.
       context.addOnCompleteCallback{ () => closeIfNeeded() }
       val key: K = reader.createKey()
       val value: V = reader.createValue()
       override def getNext() = {
         try {
+          val beginPosition = reader.getPos()
+          val startTime = System.nanoTime()
           finished = !reader.next(key, value)
+          totalReadTimeNanos += System.nanoTime() - startTime
+          totalBytesRead += reader.getPos() - beginPosition
+          if (finished) {
+            setInputMetrics()
+          }
         } catch {
-          case eof: EOFException =>
+          case eof: EOFException => {
             finished = true
+            setInputMetrics()
+          }
         }
         (key, value)
+      }
+
+      def setInputMetrics() {
+        inputMetrics.readTime = totalReadTimeNanos
+        inputMetrics.bytesRead = totalBytesRead
+        context.taskMetrics.inputMetrics = Some(inputMetrics)
       }
 
       override def close() {

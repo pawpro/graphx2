@@ -46,10 +46,12 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
 
   // Total metrics reflect metrics only for completed tasks
   var totalTime = 0L
+  var totalInputBytes = 0L
   var totalShuffleRead = 0L
   var totalShuffleWrite = 0L
 
   val stageIdToTime = HashMap[Int, Long]()
+  val stageIdToInputBytes = HashMap[Int, Long]()
   val stageIdToShuffleRead = HashMap[Int, Long]()
   val stageIdToShuffleWrite = HashMap[Int, Long]()
   val stageIdToMemoryBytesSpilled = HashMap[Int, Long]()
@@ -152,6 +154,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
         y.taskTime += taskEnd.taskInfo.duration
 
         Option(taskEnd.taskMetrics).foreach { taskMetrics =>
+          taskMetrics.inputMetrics.foreach { y.inputBytes += _.bytesRead }
           taskMetrics.shuffleReadMetrics.foreach { y.shuffleRead += _.remoteBytesRead }
           taskMetrics.shuffleWriteMetrics.foreach { y.shuffleWrite += _.shuffleBytesWritten }
           y.memoryBytesSpilled += taskMetrics.memoryBytesSpilled
@@ -178,6 +181,12 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
     val time = metrics.map(m => m.executorRunTime).getOrElse(0)
     stageIdToTime(sid) += time
     totalTime += time
+
+    stageIdToInputBytes.getOrElseUpdate(sid, 0L)
+    val inputBytes = metrics.flatMap(m => m.inputMetrics).map(metrics =>
+      metrics.bytesRead).getOrElse(0L)
+    stageIdToInputBytes(sid) += inputBytes
+    totalInputBytes += inputBytes
 
     stageIdToShuffleRead.getOrElseUpdate(sid, 0L)
     val shuffleRead = metrics.flatMap(m => m.shuffleReadMetrics).map(s =>
