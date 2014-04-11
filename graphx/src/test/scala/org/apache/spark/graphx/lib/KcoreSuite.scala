@@ -1,17 +1,17 @@
-package org.apache.spark.graph.algorithms
+package org.apache.spark.graphx.lib
 
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
-import org.apache.spark.graph._
-import org.apache.spark.graph.util.GraphGenerators
+import org.apache.spark.graphx._
+// import org.apache.spark.graphx.util.GraphGenerators
 import org.apache.spark.rdd._
 
 
 class KCoreSuite extends FunSuite with LocalSparkContext {
 
-  def createTriple(sid: Vid, did: Vid, sattr: Int, dattr: Int, eattr: Int): EdgeTriplet[Int,Int] = {
+  def createTriple(sid: VertexId, did: VertexId, sattr: Int, dattr: Int, eattr: Int): EdgeTriplet[Int,Int] = {
     val et = new EdgeTriplet[Int,Int]
     et.srcId = sid
     et.dstId = did
@@ -32,7 +32,7 @@ class KCoreSuite extends FunSuite with LocalSparkContext {
       val rawEdges = createKCoreEdges()
       val vertices = Set((11, 1), (12,1), (13,1), (14,1), (21,2), (22,2), (23,2), (31, 3), (32,3), (33,3), (34,3))
       val graph = Graph.fromEdges(sc.parallelize(rawEdges), "a")
-      val resultGraph = KCore.run(graph, 1, 5)
+      val resultGraph = KCore.run(graph, 5)
       val resultVerts = resultGraph.vertices.collect.toSet
       assert(resultVerts === vertices)
 

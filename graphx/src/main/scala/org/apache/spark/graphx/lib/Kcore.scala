@@ -1,8 +1,9 @@
-package org.apache.spark.graph.algorithms
+package org.apache.spark.graphx.lib
 
-import org.apache.spark.graph._
+import org.apache.spark.graphx._
 import org.apache.spark._
 import scala.math._
+import scala.reflect.ClassTag
 
 object KCore extends Logging {
   /**
@@ -25,7 +26,7 @@ object KCore extends Logging {
    * graph but will yield all the cores for all k in [1, kmax].
    */
 
-  def run[VD: Manifest, ED: Manifest](
+  def run[VD: ClassTag, ED: ClassTag](
       graph: Graph[VD, ED],
       kmax: Int)
     : Graph[Int, ED] = {
@@ -40,8 +41,8 @@ object KCore extends Logging {
     g.mapVertices({ case (_, (k, _)) => k})
   }
 
-  def computeCurrentKCore[ED: Manifest](graph: Graph[(Int, Boolean), ED], k: Int) = {
-    def sendMsg(et: EdgeTriplet[(Int, Boolean), ED]): Iterator[(Vid, (Int, Boolean))] = {
+  def computeCurrentKCore[ED: ClassTag](graph: Graph[(Int, Boolean), ED], k: Int) = {
+    def sendMsg(et: EdgeTriplet[(Int, Boolean), ED]): Iterator[(VertexId, (Int, Boolean))] = {
       if (!et.srcAttr._2 || !et.dstAttr._2) {
         // if either vertex has already been turned off, in which case we do nothing
         Iterator.empty
@@ -64,7 +65,7 @@ object KCore extends Logging {
       (m1._1 + m2._1, m1._2 && m2._2)
     }
 
-    def vProg(vid: Vid, data: (Int, Boolean), update: (Int, Boolean)): (Int, Boolean) = {
+    def vProg(vid: VertexId, data: (Int, Boolean), update: (Int, Boolean)): (Int, Boolean) = {
       var newCount = data._1
       var on = data._2
       if (on) {
@@ -75,6 +76,6 @@ object KCore extends Logging {
     }
 
     // Note that initial message should have no effect
-    Pregel.undirectedRun(graph, (0, true))(vProg, sendMsg, mergeMsg)
+    Pregel(graph, (0, true))(vProg, sendMsg, mergeMsg)
   }
 }
