@@ -32,10 +32,14 @@ object KCore extends Logging {
     : Graph[Int, ED] = {
 
     // Graph[(Int, Boolean), ED] - boolean indicates whether it is active or not
-    var g = graph.outerJoinVertices(graph.degrees)((vid, oldData, newData) => (newData.getOrElse(0), true))
+    var g = graph.outerJoinVertices(graph.degrees)((vid, oldData, newData) => (newData.getOrElse(0), true)).cache
     var curK = 1
     while (curK <= kmax) {
-      g = computeCurrentKCore(g, curK)
+      g = computeCurrentKCore(g, curK).cache
+      val testK = curK
+      val vCount = g.vertices.filter{ case (vid, (vd, _)) => vd >= testK}.count()
+      val eCount = g.triplets.map{t => t.srcAttr._1 >= testK && t.dstAttr._1 >= testK }.count()
+      logWarning(s"K=$curK, V=$vCount, E=$eCount")
       curK += 1
     }
     g.mapVertices({ case (_, (k, _)) => k})
@@ -44,7 +48,7 @@ object KCore extends Logging {
   def computeCurrentKCore[ED: ClassTag](graph: Graph[(Int, Boolean), ED], k: Int) = {
     def sendMsg(et: EdgeTriplet[(Int, Boolean), ED]): Iterator[(VertexId, (Int, Boolean))] = {
       if (!et.srcAttr._2 || !et.dstAttr._2) {
-        // if either vertex has already been turned off, in which case we do nothing
+        // if either vertex has already been turned off we do nothing
         Iterator.empty
       } else if (et.srcAttr._1 < k && et.dstAttr._1 < k) {
         // tell both vertices to turn off but don't need change count value
@@ -56,6 +60,8 @@ object KCore extends Logging {
         // if dst is being pruned, tell src to subtract from vertex count but don't turn off
         Iterator((et.dstId, (0, false)), (et.srcId, (1, true)))
       } else {
+        // no-op but keep these vertices active?
+        // Iterator((et.srcId, (0, true)), (et.dstId, (0, true)))
         Iterator.empty
       }
     }
@@ -76,6 +82,7 @@ object KCore extends Logging {
     }
 
     // Note that initial message should have no effect
+    logWarning("kcore starting pregel")
     Pregel(graph, (0, true))(vProg, sendMsg, mergeMsg)
   }
 }

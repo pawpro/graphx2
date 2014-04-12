@@ -127,6 +127,7 @@ object Pregel extends Logging {
     // Loop
     var prevG: Graph[VD, ED] = null.asInstanceOf[Graph[VD, ED]]
     var i = 0
+    logWarning("Starting pregel.")
     while (activeMessages > 0 && i < maxIterations) {
       // Receive the messages. Vertices that didn't get any messages do not appear in newVerts.
       val newVerts = g.vertices.innerJoin(messages)(vprog).cache()
@@ -157,6 +158,8 @@ object Pregel extends Logging {
       newVerts.unpersist(blocking=false)
       prevG.unpersistVertices(blocking=false)
       // count the iteration
+      logWarning(s"Pregel iteration $i")
+      // println(s"Pregel iteration $i")
       i += 1
     }
 
