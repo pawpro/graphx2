@@ -3,6 +3,7 @@ package org.apache.spark.graphx.lib
 import org.apache.spark.graphx._
 import org.apache.spark._
 import scala.math._
+import org.apache.spark.SparkContext._
 import scala.reflect.ClassTag
 
 object KCore extends Logging {
@@ -28,12 +29,15 @@ object KCore extends Logging {
 
   def run[VD: ClassTag, ED: ClassTag](
       graph: Graph[VD, ED],
-      kmax: Int)
+      kmax: Int,
+      kmin: Int = 1)
     : Graph[Int, ED] = {
 
     // Graph[(Int, Boolean), ED] - boolean indicates whether it is active or not
     var g = graph.outerJoinVertices(graph.degrees)((vid, oldData, newData) => (newData.getOrElse(0), true)).cache
-    var curK = 1
+    var degrees = graph.degrees
+    println("degree distribution: " + degrees.map{ case (vid,data) => (data, 1)}.reduceByKey((_+_)).collect().mkString(", "))
+    var curK = kmin
     while (curK <= kmax) {
       g = computeCurrentKCore(g, curK).cache
       val testK = curK

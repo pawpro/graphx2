@@ -133,12 +133,14 @@ object Analytics extends Logging {
 
       case "kcore" =>
         var numEPart = 4
-        var kmax = 3
+        var kmax = 4
+        var kmin = 1
         var partitionStrategy: Option[PartitionStrategy] = None
 
         options.foreach{
           case ("numEPart", v) => numEPart = v.toInt
           case ("kmax", v) => kmax = v.toInt
+          case ("kmin", v) => kmin = v.toInt
           case ("partStrategy", v) => partitionStrategy = Some(pickPartitioner(v))
           case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
         }
@@ -147,6 +149,11 @@ object Analytics extends Logging {
           logWarning("kmax must be positive")
           sys.exit(1)
         }
+        if (kmax < kmin) {
+          logWarning("kmax must be greater than or equal to kmin")
+          sys.exit(1)
+        }
+        
         println("======================================")
         println("|               KCORE                 |")
         println("======================================")
@@ -156,7 +163,7 @@ object Analytics extends Logging {
           minEdgePartitions = numEPart).cache()
         val graph = partitionStrategy.foldLeft(unpartitionedGraph)(_.partitionBy(_))
 
-        val result = KCore.run(graph, kmax)
+        val result = KCore.run(graph, kmax, kmin)
         println("Size of cores: " + result.vertices.map{ case (vid,data) => (data, 1)}.reduceByKey((_+_)).collect().mkString(", "))
         sc.stop()
 
