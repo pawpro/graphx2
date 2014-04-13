@@ -110,7 +110,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val p = 100
       val verts = 1 to n
       val graph = Graph.fromEdgeTuples(sc.parallelize(verts.flatMap(x =>
-        verts.filter(y => y % x == 0).map(y => (x: VertexId, y: VertexId))), p), 0)
+        verts.withFilter(y => y % x == 0).map(y => (x: VertexId, y: VertexId))), p), 0)
       assert(graph.edges.partitions.length === p)
       val partitionedGraph = graph.partitionBy(EdgePartition2D)
       assert(graph.edges.partitions.length === p)
@@ -120,7 +120,13 @@ class GraphSuite extends FunSuite with LocalSparkContext {
         val part = iter.next()._2
         Iterator((part.srcIds ++ part.dstIds).toSet)
       }.collect
-      assert(verts.forall(id => partitionSets.count(_.contains(id)) <= bound))
+      if (!verts.forall(id => partitionSets.count(_.contains(id)) <= bound)) {
+        val numFailures = verts.count(id => partitionSets.count(_.contains(id)) > bound)
+        val failure = verts.maxBy(id => partitionSets.count(_.contains(id)))
+        fail(("Replication bound test failed for %d/%d vertices. " +
+          "Example: vertex %d replicated to %d (> %f) partitions.").format(
+          numFailures, n, failure, partitionSets.count(_.contains(failure)), bound))
+      }
       // This should not be true for the default hash partitioning
       val partitionSetsUnpartitioned = graph.edges.partitionsRDD.mapPartitions { iter =>
         val part = iter.next()._2
@@ -177,6 +183,8 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val vertices: RDD[(VertexId, Int)] = sc.parallelize(Array((1L, 1), (2L, 2)))
       val edges: RDD[Edge[Int]] = sc.parallelize(Array(Edge(1L, 2L, 0)))
       val graph = Graph(vertices, edges).reverse
+      assert(graph.asInstanceOf[impl.GraphImpl[Int, Int]].replicatedVertexView.hasSrcId === false)
+      assert(graph.asInstanceOf[impl.GraphImpl[Int, Int]].replicatedVertexView.hasDstId === false)
       val result = graph.mapReduceTriplets[Int](et => Iterator((et.dstId, et.srcAttr)), _ + _)
       assert(result.collect.toSet === Set((1L, 2)))
     }

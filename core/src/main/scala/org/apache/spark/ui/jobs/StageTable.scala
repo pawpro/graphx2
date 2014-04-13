@@ -88,7 +88,7 @@ private[ui] class StageTableBase(
 
     val nameLink =
       <a href={"%s/stages/stage?id=%s".format(UIUtils.prependBaseUri(basePath), s.stageId)}>
-        {s.name}
+        {s.name + " (%s)".format(s.rddInfo.name)}
       </a>
 
     listener.stageIdToDescription.get(s.stageId)
