@@ -35,8 +35,12 @@ object KCore extends Logging {
 
     // Graph[(Int, Boolean), ED] - boolean indicates whether it is active or not
     var g = graph.outerJoinVertices(graph.degrees)((vid, oldData, newData) => (newData.getOrElse(0), true)).cache
-    var degrees = graph.degrees
-    println("degree distribution: " + degrees.map{ case (vid,data) => (data, 1)}.reduceByKey((_+_)).collect().mkString(", "))
+    val degrees = graph.degrees
+    val numVertices = degrees.count
+    // logWarning(s"Numvertices: $numVertices")
+    // logWarning(s"degree sample: ${degrees.take(10).mkString(", ")}")
+    // logWarning("degree distribution: " + degrees.map{ case (vid,data) => (data, 1)}.reduceByKey((_+_)).collect().mkString(", "))
+    // logWarning("degree distribution: " + degrees.map{ case (vid,data) => (data, 1)}.reduceByKey((_+_)).take(10).mkString(", "))
     var curK = kmin
     while (curK <= kmax) {
       g = computeCurrentKCore(g, curK).cache
@@ -50,6 +54,7 @@ object KCore extends Logging {
   }
 
   def computeCurrentKCore[ED: ClassTag](graph: Graph[(Int, Boolean), ED], k: Int) = {
+    logWarning(s"Computing kcore for k=$k")
     def sendMsg(et: EdgeTriplet[(Int, Boolean), ED]): Iterator[(VertexId, (Int, Boolean))] = {
       if (!et.srcAttr._2 || !et.dstAttr._2) {
         // if either vertex has already been turned off we do nothing
@@ -86,7 +91,6 @@ object KCore extends Logging {
     }
 
     // Note that initial message should have no effect
-    logWarning("kcore starting pregel")
     Pregel(graph, (0, true))(vProg, sendMsg, mergeMsg)
   }
 }

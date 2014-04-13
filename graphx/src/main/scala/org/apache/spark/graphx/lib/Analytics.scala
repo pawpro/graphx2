@@ -18,6 +18,7 @@
 package org.apache.spark.graphx.lib
 
 import org.apache.spark._
+import scala.math._
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.PartitionStrategy._
 import org.apache.spark.SparkContext._
@@ -163,8 +164,10 @@ object Analytics extends Logging {
           minEdgePartitions = numEPart).cache()
         val graph = partitionStrategy.foldLeft(unpartitionedGraph)(_.partitionBy(_))
 
+        logWarning("Starting kcore")
         val result = KCore.run(graph, kmax, kmin)
-        println("Size of cores: " + result.vertices.map{ case (vid,data) => (data, 1)}.reduceByKey((_+_)).collect().mkString(", "))
+
+        logWarning("Size of cores: " + result.vertices.map { case (vid,data) => (min(data, kmax), 1) }.reduceByKey((_+_)).collect().mkString(", "))
         sc.stop()
 
       case "triangles" =>
