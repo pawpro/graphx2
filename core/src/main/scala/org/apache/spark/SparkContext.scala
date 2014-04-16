@@ -204,7 +204,10 @@ class SparkContext(
 
   // Add a job logger.
   if (conf.getBoolean("spark.jobLogger.enabled", false)) {
-    addSparkListener(new JobLogger())
+    val jobLogger = new JobLogger()
+    if (jobLogger.successfullyCreatedLogDir) {
+      addSparkListener(jobLogger)
+    }
   }
 
   ui.start()
