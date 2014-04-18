@@ -296,22 +296,30 @@ class JobLogger(val user: String, val logDirName: String)
     }
     val shuffleReadMetrics = taskMetrics.shuffleReadMetrics match {
       case Some(metrics) =>
-        " SHUFFLE_FINISH_TIME=" + metrics.shuffleFinishTime +
-        " BLOCK_FETCHED_TOTAL=" + metrics.totalBlocksFetched +
-        " BLOCK_FETCHED_LOCAL=" + metrics.localBlocksFetched +
-        " BLOCK_FETCHED_REMOTE=" + metrics.remoteBlocksFetched +
-        " REMOTE_FETCH_WAIT_TIME=" + metrics.fetchWaitTime +
-        " REMOTE_FETCH_TIME=" + metrics.remoteFetchTime +
-        " REMOTE_DISK_READ_TIME=" + metrics.remoteDiskReadTime +
-        " REMOTE_BYTES_READ=" + metrics.remoteBytesRead +
-        " LOCAL_READ_TIME=" + metrics.localReadTime +
-        " LOCAL_READ_BYTES=" + metrics.localReadBytes
+        var metricsStr = (" SHUFFLE_FINISH_TIME=" + metrics.shuffleFinishTime +
+          " BLOCK_FETCHED_TOTAL=" + metrics.totalBlocksFetched +
+          " BLOCK_FETCHED_LOCAL=" + metrics.localBlocksFetched +
+          " BLOCK_FETCHED_REMOTE=" + metrics.remoteBlocksFetched +
+          " REMOTE_FETCH_WAIT_TIME=" + metrics.fetchWaitTime +
+          " REMOTE_FETCH_TIME=" + metrics.remoteFetchTime +
+          " REMOTE_DISK_READ_TIME=" + metrics.remoteDiskReadTime +
+          " REMOTE_BYTES_READ=" + metrics.remoteBytesRead +
+          " LOCAL_READ_TIME=" + metrics.localReadTime +
+          " LOCAL_READ_BYTES=" + metrics.localReadBytes)
+        if (metrics.deserializationMetrics.isDefined) {
+          val deserializationMetrics = metrics.deserializationMetrics.get
+          metricsStr += (" DESERIALIZATION_TIME_NANOS=" +
+            deserializationMetrics.deserializationTimeNanos +
+            " DESERIALIZED_ITEMS=" + deserializationMetrics.itemsDeserialized)
+        }
+        metricsStr
       case None => ""
     }
     val writeMetrics = taskMetrics.shuffleWriteMetrics match {
       case Some(metrics) =>
         " SHUFFLE_BYTES_WRITTEN=" + metrics.shuffleBytesWritten +
-        " SHUFFLE_WRITE_TIME=" + metrics.shuffleWriteTime
+        " SHUFFLE_WRITE_TIME=" + metrics.shuffleWriteTime +
+        " SERIALIZATION_TIME_NANOS=" + metrics.serializationTime
       case None => ""
     }
     stageLogInfo(stageID, status + info + executorRunTime + inputMetrics + shuffleReadMetrics +

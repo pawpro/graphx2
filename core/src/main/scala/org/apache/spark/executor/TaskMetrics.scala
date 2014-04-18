@@ -88,6 +88,12 @@ private[spark] object DataReadMethod extends Enumeration with Serializable {
   val Memory, Disk, Hdfs, Network = Value
 }
 
+// Deserialization always is included in setupTime + readTime
+case class DeserializationMetrics() {
+  var deserializationTimeNanos: Long = _
+  var itemsDeserialized: Int = _
+}
+
 /**
  * Metrics about reading input data.
  * @param readMethod The method by which data was read.
@@ -106,10 +112,15 @@ case class InputMetrics(val readMethod: DataReadMethod.Value, val setupTime: Lon
    * Total bytes read.
    */
   var bytesRead: Long = 0L
+
+  var deserializationMetrics: Option[DeserializationMetrics] = None
 }
 
 
 class ShuffleReadMetrics extends Serializable {
+  /** Deserialization counts as part of the compute time and is not included in the shuffle time. */
+  var deserializationMetrics: Option[DeserializationMetrics] = None
+
   /**
    * Absolute time when this task finished reading shuffle data
    */
@@ -177,4 +188,9 @@ class ShuffleWriteMetrics extends Serializable {
    * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds
    */
   var shuffleWriteTime: Long = _
+
+  /**
+   * Time the task spent serializing data to write to disk, in nanoseconds.
+   */
+  var serializationTime: Long = _
 }

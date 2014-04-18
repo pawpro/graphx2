@@ -68,6 +68,11 @@ private[spark] abstract class BlockObjectWriter(val blockId: BlockId) {
   def timeWriting(): Long
 
   /**
+   * Time spent serialization data in preparation for writing it, in ns.
+   */
+  def timeSerializing(): Long
+
+  /**
    * Number of bytes written so far
    */
   def bytesWritten: Long
@@ -113,6 +118,7 @@ private[spark] class DiskBlockObjectWriter(
   private var lastValidPosition = initialPosition
   private var initialized = false
   private var _timeWriting = 0L
+  private var _timeWritingIncludingSerialization = 0L
 
   override def open(): BlockObjectWriter = {
     fos = new FileOutputStream(file, true)
@@ -129,7 +135,9 @@ private[spark] class DiskBlockObjectWriter(
     if (initialized) {
       if (syncWrites) {
         // Force outstanding writes to disk and track how long it takes
+        val serStart = System.nanoTime()
         objOut.flush()
+        _timeWritingIncludingSerialization += System.nanoTime() - serStart
         val start = System.nanoTime()
         fos.getFD.sync()
         _timeWriting += System.nanoTime() - start
@@ -153,7 +161,9 @@ private[spark] class DiskBlockObjectWriter(
     if (initialized) {
       // NOTE: Because Kryo doesn't flush the underlying stream we explicitly flush both the
       //       serializer stream and the lower level stream.
+      val start = System.nanoTime()
       objOut.flush()
+      _timeWritingIncludingSerialization += System.nanoTime() - start
       bs.flush()
       val prevPos = lastValidPosition
       lastValidPosition = channel.position()
@@ -178,7 +188,9 @@ private[spark] class DiskBlockObjectWriter(
     if (!initialized) {
       open()
     }
+    val start = System.nanoTime()
     objOut.writeObject(value)
+    _timeWritingIncludingSerialization += System.nanoTime() - start
   }
 
   override def fileSegment(): FileSegment = {
@@ -187,6 +199,9 @@ private[spark] class DiskBlockObjectWriter(
 
   // Only valid if called after close()
   override def timeWriting() = _timeWriting
+
+  // Only valid if called after close()
+  override def timeSerializing() = _timeWritingIncludingSerialization - _timeWriting
 
   // Only valid if called after commit()
   override def bytesWritten: Long = {

@@ -167,12 +167,14 @@ private[spark] class ShuffleMapTask(
       // Commit the writes. Get the size of each bucket block (total block size).
       var totalBytes = 0L
       var totalTime = 0L
+      var totalSerializationTime = 0L
       val compressedSizes: Array[Byte] = shuffle.writers.map { writer: BlockObjectWriter =>
         writer.commit()
         writer.close()
         val size = writer.fileSegment().length
         totalBytes += size
         totalTime += writer.timeWriting()
+        totalSerializationTime += writer.timeSerializing()
         MapOutputTracker.compressSize(size)
       }
 
@@ -180,6 +182,7 @@ private[spark] class ShuffleMapTask(
       val shuffleMetrics = new ShuffleWriteMetrics
       shuffleMetrics.shuffleBytesWritten = totalBytes
       shuffleMetrics.shuffleWriteTime = totalTime
+      shuffleMetrics.serializationTime = totalSerializationTime
       metrics.get.shuffleWriteMetrics = Some(shuffleMetrics)
 
       success = true

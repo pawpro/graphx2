@@ -26,6 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.Logging
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.Utils
+import org.apache.spark.executor.DeserializationMetrics
 
 
 /**
@@ -101,8 +102,9 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
    * A version of getValues that allows a custom serializer. This is used as part of the
    * shuffle short-circuit code.
    */
-  def getValues(blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
-    getBytes(blockId).map(bytes => blockManager.dataDeserialize(blockId, bytes, serializer))
+  def getValues(blockId: BlockId, serializer: Serializer,
+                deserializationMetrics: DeserializationMetrics): Option[Iterator[Any]] = {
+    getBytes(blockId).map(bytes => blockManager.dataDeserialize(blockId, bytes, Some(deserializationMetrics), serializer))
   }
 
   override def remove(blockId: BlockId): Boolean = {

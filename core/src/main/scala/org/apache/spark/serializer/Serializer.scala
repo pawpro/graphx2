@@ -22,6 +22,7 @@ import java.nio.ByteBuffer
 
 import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
 
+import org.apache.spark.executor.DeserializationMetrics
 import org.apache.spark.util.{NextIterator, ByteBufferInputStream}
 
 
@@ -102,6 +103,31 @@ trait DeserializationStream {
     override protected def getNext() = {
       try {
         readObject[Any]()
+      } catch {
+        case eof: EOFException =>
+          finished = true
+      }
+    }
+
+    override protected def close() {
+      DeserializationStream.this.close()
+    }
+  }
+
+  /**
+   * Read the elements of this stream through an iterator, where deserialization information is
+   * recorded in the given DeserializationMetrics.  This can only be called once, as
+   * reading each element will consume data from the input source.
+   */
+  def asIteratorWithMetrics(metrics: DeserializationMetrics)
+    : Iterator[Any] = new NextIterator[Any] {
+    override protected def getNext() = {
+      try {
+        val startTime = System.nanoTime()
+        val ret = readObject[Any]()
+        metrics.deserializationTimeNanos += System.nanoTime() - startTime
+        metrics.itemsDeserialized += 1
+        ret
       } catch {
         case eof: EOFException =>
           finished = true

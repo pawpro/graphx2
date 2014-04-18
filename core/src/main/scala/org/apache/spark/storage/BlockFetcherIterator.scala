@@ -34,6 +34,7 @@ import org.apache.spark.network.ConnectionManagerId
 import org.apache.spark.network.netty.ShuffleCopier
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.Utils
+import org.apache.spark.executor.DeserializationMetrics
 
 
 /**
@@ -73,7 +74,8 @@ object BlockFetcherIterator {
   class BasicBlockFetcherIterator(
       private val blockManager: BlockManager,
       val blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])],
-      serializer: Serializer)
+      serializer: Serializer,
+      deserializationMetrics: DeserializationMetrics)
     extends BlockFetcherIterator {
 
     import blockManager._
@@ -144,7 +146,8 @@ object BlockFetcherIterator {
             val blockId = blockMessage.getId
             val networkSize = blockMessage.getData.limit()
             results.put(new FetchResult(blockId, sizeMap(blockId),
-              () => dataDeserialize(blockId, blockMessage.getData, serializer)))
+              () => dataDeserialize(blockId, blockMessage.getData, Some(deserializationMetrics),
+                serializer)))
             _remoteBytesRead += networkSize
             totalRemoteDiskTime += blockMessage.readTimeNanos
             logDebug("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
@@ -215,7 +218,9 @@ object BlockFetcherIterator {
       // any memory that might exceed our maxBytesInFlight
       val startTime = System.currentTimeMillis()
       for (id <- localBlocksToFetch) {
-        getLocalFromDisk(id, serializer) match {
+        // Thread safety here isn't an issue because deserializaton happens in a single
+        // thread (in the calling thread).
+        getLocalFromDisk(id, serializer, deserializationMetrics) match {
           case Some(iter) => {
             // Pass 0 as size since it's not in flight
             results.put(new FetchResult(id, 0, () => iter))
@@ -286,8 +291,10 @@ object BlockFetcherIterator {
   class NettyBlockFetcherIterator(
       blockManager: BlockManager,
       blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])],
-      serializer: Serializer)
-    extends BasicBlockFetcherIterator(blockManager, blocksByAddress, serializer) {
+      serializer: Serializer,
+      deserializationMetrics: DeserializationMetrics)
+    extends BasicBlockFetcherIterator(blockManager, blocksByAddress, serializer,
+      deserializationMetrics) {
 
     import blockManager._
 
@@ -323,7 +330,7 @@ object BlockFetcherIterator {
 
       def putResult(blockId: BlockId, blockSize: Long, blockData: ByteBuf) {
         val fetchResult = new FetchResult(blockId, blockSize,
-          () => dataDeserialize(blockId, blockData.nioBuffer, serializer))
+          () => dataDeserialize(blockId, blockData.nioBuffer, Some(deserializationMetrics), serializer))
         results.put(fetchResult)
       }
 
