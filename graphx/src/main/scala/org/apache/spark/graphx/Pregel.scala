@@ -19,6 +19,7 @@ package org.apache.spark.graphx
 
 import scala.reflect.ClassTag
 import org.apache.spark.SparkEnv
+import org.apache.spark.Logging
 
 
 /**
@@ -53,7 +54,7 @@ import org.apache.spark.SparkEnv
  * }}}
  *
  */
-object Pregel {
+object Pregel extends Logging {
 
   /**
    * Execute a Pregel-like iterative vertex-parallel abstraction.  The
@@ -143,6 +144,8 @@ object Pregel {
       // hides oldMessages (depended on by newVerts), newVerts (depended on by messages), and the
       // vertices of prevG (depended on by newVerts, oldMessages, and the vertices of g).
       activeMessages = messages.count()
+
+      logInfo("Pregel finished iteration " + i)
 
       // Very ugly code to clear the in-memory shuffle data
       messages.foreachPartition { iter =>
