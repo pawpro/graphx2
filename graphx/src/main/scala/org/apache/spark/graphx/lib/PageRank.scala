@@ -77,8 +77,8 @@ object PageRank extends Logging {
    *
    */
   def run[VD: ClassTag, ED: ClassTag](
-      graph: Graph[VD, ED], numIter: Int, resetProb: Double = 0.15): Graph[Double, Double] =
-  {
+      graph: Graph[VD, ED], numIter: Int, resetProb: Double = 0.15, checkpoint: Boolean = false)
+    : Graph[Double, Double] = {
     // Initialize the pagerankGraph with each edge attribute having
     // weight 1/outDegree and each vertex with attribute 1.0.
     val pagerankGraph: Graph[Double, Double] = graph
@@ -101,8 +101,8 @@ object PageRank extends Logging {
     val initialMessage = 0.0
 
     // Execute pregel for a fixed number of iterations.
-    Pregel(pagerankGraph, initialMessage, numIter, activeDirection = EdgeDirection.Out)(
-      vertexProgram, sendMessage, messageCombiner)
+    Pregel(pagerankGraph, initialMessage, numIter, activeDirection = EdgeDirection.Out,
+      checkpoint = checkpoint)(vertexProgram, sendMessage, messageCombiner)
   }
 
   /**
@@ -120,8 +120,8 @@ object PageRank extends Logging {
    *         containing the normalized weight.
    */
   def runUntilConvergence[VD: ClassTag, ED: ClassTag](
-      graph: Graph[VD, ED], tol: Double, resetProb: Double = 0.15): Graph[Double, Double] =
-  {
+      graph: Graph[VD, ED], tol: Double, resetProb: Double = 0.15, checkpoint: Boolean = false)
+    : Graph[Double, Double] = {
     // Initialize the pagerankGraph with each edge attribute
     // having weight 1/outDegree and each vertex with attribute 1.0.
     val pagerankGraph: Graph[(Double, Double), Double] = graph
@@ -157,8 +157,8 @@ object PageRank extends Logging {
     val initialMessage = resetProb / (1.0 - resetProb)
 
     // Execute a dynamic version of Pregel.
-    Pregel(pagerankGraph, initialMessage, activeDirection = EdgeDirection.Out)(
-      vertexProgram, sendMessage, messageCombiner)
+    Pregel(pagerankGraph, initialMessage, activeDirection = EdgeDirection.Out,
+      checkpoint = checkpoint)(vertexProgram, sendMessage, messageCombiner)
       .mapVertices((vid, attr) => attr._1)
   } // end of deltaPageRank
 }

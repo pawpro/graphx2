@@ -59,6 +59,7 @@ object Analytics extends Logging {
         var numEPart = 4
         var partitionStrategy: Option[PartitionStrategy] = None
         var numIterOpt: Option[Int] = None
+        var checkpointDirOpt: Option[String] = None
 
         options.foreach{
           case ("tol", v) => tol = v.toFloat
@@ -66,6 +67,7 @@ object Analytics extends Logging {
           case ("numEPart", v) => numEPart = v.toInt
           case ("partStrategy", v) => partitionStrategy = Some(pickPartitioner(v))
           case ("numIter", v) => numIterOpt = Some(v.toInt)
+          case ("checkpointDir", v) => checkpointDirOpt = Some(v)
           case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
         }
 
@@ -74,6 +76,10 @@ object Analytics extends Logging {
         println("======================================")
 
         val sc = new SparkContext(host, "PageRank(" + fname + ")", conf)
+        checkpointDirOpt match {
+          case Some(checkpointDir) => sc.setCheckpointDir(checkpointDir)
+          case None => {}
+        }
 
         val unpartitionedGraph = GraphLoader.edgeListFile(sc, fname,
           minEdgePartitions = numEPart).cache()
@@ -83,8 +89,8 @@ object Analytics extends Logging {
         println("GRAPHX: Number of edges " + graph.edges.count)
 
         val pr = (numIterOpt match {
-          case Some(numIter) => PageRank.run(graph, numIter)
-          case None => PageRank.runUntilConvergence(graph, tol)
+          case Some(numIter) => PageRank.run(graph, numIter, checkpoint = checkpointDirOpt.nonEmpty)
+          case None => PageRank.runUntilConvergence(graph, tol, checkpoint = checkpointDirOpt.nonEmpty)
         }).vertices.cache()
 
         println("GRAPHX: Total rank: " + pr.map(_._2).reduce(_ + _))

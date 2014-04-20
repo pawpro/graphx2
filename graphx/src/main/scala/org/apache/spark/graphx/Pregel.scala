@@ -114,12 +114,16 @@ object Pregel extends Logging {
      (graph: Graph[VD, ED],
       initialMsg: A,
       maxIterations: Int = Int.MaxValue,
-      activeDirection: EdgeDirection = EdgeDirection.Either)
+      activeDirection: EdgeDirection = EdgeDirection.Either,
+      checkpoint: Boolean = false)
      (vprog: (VertexId, VD, A) => VD,
       sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] =
   {
+    if (checkpoint) {
+      graph.edges.checkpoint()
+    }
     var g = graph.mapVertices((vid, vdata) => vprog(vid, vdata, initialMsg)).cache()
     // compute the messages
     var messages = g.mapReduceTriplets(sendMsg, mergeMsg)
@@ -134,6 +138,9 @@ object Pregel extends Logging {
       prevG = g
       g = g.outerJoinVertices(newVerts) { (vid, old, newOpt) => newOpt.getOrElse(old) }
       g.cache()
+      if (checkpoint) {
+        g.vertices.checkpoint()
+      }
 
       val oldMessages = messages
       // Send new messages. Vertices that didn't get any messages don't appear in newVerts, so don't
