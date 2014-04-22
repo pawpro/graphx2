@@ -59,6 +59,7 @@ object Analytics extends Logging {
         var numEPart = 4
         var partitionStrategy: Option[PartitionStrategy] = None
         var numIterOpt: Option[Int] = None
+        var unpersist: Boolean = true
 
         options.foreach{
           case ("tol", v) => tol = v.toFloat
@@ -66,6 +67,7 @@ object Analytics extends Logging {
           case ("numEPart", v) => numEPart = v.toInt
           case ("partStrategy", v) => partitionStrategy = Some(pickPartitioner(v))
           case ("numIter", v) => numIterOpt = Some(v.toInt)
+          case ("unpersist", v) => unpersist = v.toBoolean
           case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
         }
 
@@ -83,7 +85,7 @@ object Analytics extends Logging {
         println("GRAPHX: Number of edges " + graph.edges.count)
 
         val pr = (numIterOpt match {
-          case Some(numIter) => PageRank.run(graph, numIter)
+          case Some(numIter) => PageRank.run(graph, numIter, unpersist = unpersist)
           case None => PageRank.runUntilConvergence(graph, tol)
         }).vertices.cache()
 
