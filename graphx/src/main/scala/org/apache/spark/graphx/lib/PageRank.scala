@@ -77,7 +77,8 @@ object PageRank extends Logging {
    *
    */
   def run[VD: ClassTag, ED: ClassTag](
-      graph: Graph[VD, ED], numIter: Int, resetProb: Double = 0.15, checkpoint: Boolean = false)
+      graph: Graph[VD, ED], numIter: Int, resetProb: Double = 0.15, checkpoint: Boolean = false,
+      unpersist: Boolean = true)
     : Graph[Double, Double] = {
     // Initialize the pagerankGraph with each edge attribute having
     // weight 1/outDegree and each vertex with attribute 1.0.
@@ -102,7 +103,7 @@ object PageRank extends Logging {
 
     // Execute pregel for a fixed number of iterations.
     Pregel(pagerankGraph, initialMessage, numIter, activeDirection = EdgeDirection.Out,
-      checkpoint = checkpoint)(vertexProgram, sendMessage, messageCombiner)
+      checkpoint = checkpoint, unpersist = unpersist)(vertexProgram, sendMessage, messageCombiner)
   }
 
   /**
