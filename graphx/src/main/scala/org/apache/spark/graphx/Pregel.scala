@@ -114,7 +114,8 @@ object Pregel extends Logging {
      (graph: Graph[VD, ED],
       initialMsg: A,
       maxIterations: Int = Int.MaxValue,
-      activeDirection: EdgeDirection = EdgeDirection.Either)
+      activeDirection: EdgeDirection = EdgeDirection.Either,
+      unpersist: Boolean = true)
      (vprog: (VertexId, VD, A) => VD,
       sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       mergeMsg: (A, A) => A)
@@ -154,9 +155,11 @@ object Pregel extends Logging {
       logWarning("Pregel finished iteration " + i)
 
       // Unpersist the RDDs hidden by newly-materialized RDDs
-      oldMessages.unpersist(blocking=false)
-      newVerts.unpersist(blocking=false)
-      prevG.unpersistVertices(blocking=false)
+      if (unpersist) {
+        oldMessages.unpersist(blocking=false)
+        newVerts.unpersist(blocking=false)
+        prevG.unpersistVertices(blocking=false)
+      }
       // count the iteration
       // logWarning(s"Pregel iteration $i")
       // println(s"Pregel iteration $i")
