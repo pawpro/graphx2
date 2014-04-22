@@ -17,9 +17,10 @@
 
 package org.apache.spark.graphx
 
-import scala.reflect.ClassTag
-import org.apache.spark.SparkEnv
 import org.apache.spark.Logging
+import org.apache.spark.SparkEnv
+import org.apache.spark.storage.StorageLevel
+import scala.reflect.ClassTag
 
 
 /**
@@ -134,7 +135,7 @@ object Pregel extends Logging {
     var i = 0
     while (activeMessages > 0 && i < maxIterations) {
       // Receive the messages. Vertices that didn't get any messages do not appear in newVerts.
-      val newVerts = g.vertices.innerJoin(messages)(vprog).cache()
+      val newVerts = g.vertices.innerJoin(messages)(vprog).persist(g.storageLevel)
       if (checkpoint) newVerts.checkpoint()
       // Update the graph with the new vertices.
       prevG = g
@@ -147,7 +148,7 @@ object Pregel extends Logging {
       // Send new messages. Vertices that didn't get any messages don't appear in newVerts, so don't
       // get to send messages. We must cache messages so it can be materialized on the next line,
       // allowing us to uncache the previous iteration.
-      messages = g.mapReduceTriplets(sendMsg, mergeMsg, Some((newVerts, activeDirection))).cache()
+      messages = g.mapReduceTriplets(sendMsg, mergeMsg, Some((newVerts, activeDirection))).persist(g.storageLevel)
       if (checkpoint) messages.checkpoint()
       // The call to count() materializes `messages`, `newVerts`, and the vertices of `g`. This
       // hides oldMessages (depended on by newVerts), newVerts (depended on by messages), and the

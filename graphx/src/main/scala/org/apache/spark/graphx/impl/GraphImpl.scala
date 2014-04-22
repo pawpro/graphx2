@@ -20,8 +20,6 @@ package org.apache.spark.graphx.impl
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.Logging
-import org.apache.spark.util.collection.PrimitiveVector
-import org.apache.spark.{HashPartitioner, Partitioner}
 import org.apache.spark.SparkContext._
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl._
@@ -29,7 +27,10 @@ import org.apache.spark.graphx.impl.MsgRDDFunctions._
 import org.apache.spark.graphx.util.BytecodeUtils
 import org.apache.spark.rdd.{ShuffledRDD, RDD}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ClosureCleaner
+import org.apache.spark.util.collection.PrimitiveVector
+import org.apache.spark.{HashPartitioner, Partitioner}
 
 
 /**
@@ -47,11 +48,12 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     @transient val vertices: VertexRDD[VD],
     @transient val edges: EdgeRDD[ED],
     @transient val routingTable: RoutingTable,
-    @transient val replicatedVertexView: ReplicatedVertexView[VD])
+    @transient val replicatedVertexView: ReplicatedVertexView[VD],
+    @transient val storageLevel: StorageLevel)
   extends Graph[VD, ED] with Serializable with Logging {
 
   /** Default constructor is provided to support serialization */
-  protected def this() = this(null, null, null, null)
+  protected def this() = this(null, null, null, null, StorageLevel.MEMORY_ONLY)
 
   /** Return a RDD that brings edges together with their source and destination vertices. */
   @transient override val triplets: RDD[EdgeTriplet[VD, ED]] = {
@@ -79,7 +81,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     this
   }
 
-  override def cache(): Graph[VD, ED] = persist(StorageLevel.MEMORY_ONLY)
+  override def cache(): Graph[VD, ED] = persist(storageLevel)
 
   override def unpersistVertices(blocking: Boolean = true): Graph[VD, ED] = {
     vertices.unpersist(blocking)
@@ -105,34 +107,34 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
         }
         val edgePartition = builder.toEdgePartition
         Iterator((pid, edgePartition))
-      }, preservesPartitioning = true).cache())
+      }, preservesPartitioning = true).persist(storageLevel))
     GraphImpl(vertices, newEdges)
   }
 
   override def reverse: Graph[VD, ED] = {
     val newETable = edges.mapEdgePartitions((pid, part) => part.reverse)
-    new GraphImpl(vertices, newETable, routingTable, replicatedVertexView)
+    new GraphImpl(vertices, newETable, routingTable, replicatedVertexView, storageLevel)
   }
 
   override def mapVertices[VD2: ClassTag](f: (VertexId, VD) => VD2): Graph[VD2, ED] = {
     if (classTag[VD] equals classTag[VD2]) {
       // The map preserves type, so we can use incremental replication
-      val newVerts = vertices.mapVertexPartitions(_.map(f)).cache()
+      val newVerts = vertices.mapVertexPartitions(_.map(f)).persist(storageLevel)
       val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
       val newReplicatedVertexView = new ReplicatedVertexView[VD2](
-        changedVerts, edges, routingTable,
+        changedVerts, edges, routingTable, storageLevel,
         Some(replicatedVertexView.asInstanceOf[ReplicatedVertexView[VD2]]))
-      new GraphImpl(newVerts, edges, routingTable, newReplicatedVertexView)
+      new GraphImpl(newVerts, edges, routingTable, newReplicatedVertexView, storageLevel)
     } else {
       // The map does not preserve type, so we must re-replicate all vertices
-      GraphImpl(vertices.mapVertexPartitions(_.map(f)), edges, routingTable)
+      GraphImpl(vertices.mapVertexPartitions(_.map(f)), edges, routingTable, storageLevel)
     }
   }
 
   override def mapEdges[ED2: ClassTag](
       f: (PartitionID, Iterator[Edge[ED]]) => Iterator[ED2]): Graph[VD, ED2] = {
     val newETable = edges.mapEdgePartitions((pid, part) => part.map(f(pid, part.iterator)))
-    new GraphImpl(vertices, newETable , routingTable, replicatedVertexView)
+    new GraphImpl(vertices, newETable , routingTable, replicatedVertexView, storageLevel)
   }
 
   override def mapTriplets[ED2: ClassTag](
@@ -165,7 +167,8 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
             Iterator.empty
           }
       }
-    new GraphImpl(vertices, new EdgeRDD(newEdgePartitions), routingTable, replicatedVertexView)
+    new GraphImpl(vertices, new EdgeRDD(newEdgePartitions), routingTable, replicatedVertexView,
+      storageLevel)
   }
 
   override def subgraph(
@@ -183,12 +186,13 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
       iter.foreach { et => builder.add(et.srcId, et.dstId, et.attr) }
       val edgePartition = builder.toEdgePartition
       Iterator((pid, edgePartition))
-    }, preservesPartitioning = true)).cache()
+    }, preservesPartitioning = true)).persist(storageLevel)
 
     // Reuse the previous ReplicatedVertexView unmodified. The replicated vertices that have been
     // removed will be ignored, since we only refer to replicated vertices when they are adjacent to
     // an edge.
-    new GraphImpl(newVerts, newEdges, new RoutingTable(newEdges, newVerts), replicatedVertexView)
+    new GraphImpl(newVerts, newEdges, new RoutingTable(newEdges, newVerts, storageLevel), replicatedVertexView,
+      storageLevel)
   } // end of subgraph
 
   override def mask[VD2: ClassTag, ED2: ClassTag] (
@@ -198,13 +202,13 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     // Reuse the previous ReplicatedVertexView unmodified. The replicated vertices that have been
     // removed will be ignored, since we only refer to replicated vertices when they are adjacent to
     // an edge.
-    new GraphImpl(newVerts, newEdges, routingTable, replicatedVertexView)
+    new GraphImpl(newVerts, newEdges, routingTable, replicatedVertexView, storageLevel)
   }
 
   override def groupEdges(merge: (ED, ED) => ED): Graph[VD, ED] = {
     ClosureCleaner.clean(merge)
     val newETable = edges.mapEdgePartitions((pid, part) => part.groupEdges(merge))
-    new GraphImpl(vertices, newETable, routingTable, replicatedVertexView)
+    new GraphImpl(vertices, newETable, routingTable, replicatedVertexView, storageLevel)
   }
 
   // ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -300,13 +304,13 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
       val newVerts = vertices.leftJoin(other)(updateF)
       val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
       val newReplicatedVertexView = new ReplicatedVertexView[VD2](
-        changedVerts, edges, routingTable,
+        changedVerts, edges, routingTable, storageLevel,
         Some(replicatedVertexView.asInstanceOf[ReplicatedVertexView[VD2]]))
-      new GraphImpl(newVerts, edges, routingTable, newReplicatedVertexView)
+      new GraphImpl(newVerts, edges, routingTable, newReplicatedVertexView, storageLevel)
     } else {
       // updateF does not preserve type, so we must re-replicate all vertices
       val newVerts = vertices.leftJoin(other)(updateF)
-      GraphImpl(newVerts, edges, routingTable)
+      GraphImpl(newVerts, edges, routingTable, storageLevel)
     }
   }
 
@@ -332,8 +336,9 @@ object GraphImpl {
 
   def fromEdgePartitions[VD: ClassTag, ED: ClassTag](
       edgePartitions: RDD[(PartitionID, EdgePartition[ED])],
-      defaultVertexAttr: VD): GraphImpl[VD, ED] = {
-    fromEdgeRDD(new EdgeRDD(edgePartitions), defaultVertexAttr)
+      defaultVertexAttr: VD,
+      storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY): GraphImpl[VD, ED] = {
+    fromEdgeRDD(new EdgeRDD(edgePartitions), defaultVertexAttr, storageLevel)
   }
 
   def apply[VD: ClassTag, ED: ClassTag](
@@ -358,24 +363,27 @@ object GraphImpl {
 
   def apply[VD: ClassTag, ED: ClassTag](
       vertices: VertexRDD[VD],
-      edges: EdgeRDD[ED]): GraphImpl[VD, ED] = {
+      edges: EdgeRDD[ED],
+      storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY): GraphImpl[VD, ED] = {
     // Cache RDDs that are referenced multiple times
-    edges.cache()
+    edges.persist(storageLevel)
 
-    GraphImpl(vertices, edges, new RoutingTable(edges, vertices))
+    GraphImpl(vertices, edges, new RoutingTable(edges, vertices, storageLevel), storageLevel)
   }
 
   def apply[VD: ClassTag, ED: ClassTag](
       vertices: VertexRDD[VD],
       edges: EdgeRDD[ED],
-      routingTable: RoutingTable): GraphImpl[VD, ED] = {
+      routingTable: RoutingTable,
+      storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY): GraphImpl[VD, ED] = {
     // Cache RDDs that are referenced multiple times. `routingTable` is cached by default, so we
     // don't cache it explicitly.
-    vertices.cache()
-    edges.cache()
+    vertices.persist(storageLevel)
+    edges.persist(storageLevel)
 
     new GraphImpl(
-      vertices, edges, routingTable, new ReplicatedVertexView(vertices, edges, routingTable))
+      vertices, edges, routingTable, new ReplicatedVertexView(vertices, edges, routingTable, storageLevel),
+      storageLevel)
   }
 
   /**
@@ -400,13 +408,14 @@ object GraphImpl {
 
   private def fromEdgeRDD[VD: ClassTag, ED: ClassTag](
       edges: EdgeRDD[ED],
-      defaultVertexAttr: VD): GraphImpl[VD, ED] = {
-    edges.cache()
+      defaultVertexAttr: VD,
+      storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY): GraphImpl[VD, ED] = {
+    edges.persist(storageLevel)
     // Get the set of all vids
     val vids = collectVertexIdsFromEdges(edges, new HashPartitioner(edges.partitions.size))
     // Create the VertexRDD.
     val vertices = VertexRDD(vids.mapValues(x => defaultVertexAttr))
-    GraphImpl(vertices, edges)
+    GraphImpl(vertices, edges, storageLevel)
   }
 
   /** Collects all vids mentioned in edges and partitions them by partitioner. */

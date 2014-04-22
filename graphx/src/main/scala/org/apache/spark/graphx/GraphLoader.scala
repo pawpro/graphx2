@@ -17,8 +17,9 @@
 
 package org.apache.spark.graphx
 
-import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.graphx.impl.{EdgePartitionBuilder, GraphImpl}
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.{Logging, SparkContext}
 
 /**
  * Provides utilities for loading [[Graph]]s from files.
@@ -54,7 +55,8 @@ object GraphLoader extends Logging {
       sc: SparkContext,
       path: String,
       canonicalOrientation: Boolean = false,
-      minEdgePartitions: Int = 1)
+      minEdgePartitions: Int = 1,
+      storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
     : Graph[Int, Int] =
   {
     val startTime = System.currentTimeMillis
@@ -78,12 +80,12 @@ object GraphLoader extends Logging {
         }
       }
       Iterator((pid, builder.toEdgePartition))
-    }.cache()
+    }.persist(storageLevel)
     edges.count()
 
     logInfo("It took %d ms to load the edges".format(System.currentTimeMillis - startTime))
 
-    GraphImpl.fromEdgePartitions(edges, defaultVertexAttr = 1)
+    GraphImpl.fromEdgePartitions(edges, defaultVertexAttr = 1, storageLevel)
   } // end of edgeListFile
 
 }
