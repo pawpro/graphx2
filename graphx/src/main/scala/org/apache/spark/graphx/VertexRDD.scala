@@ -308,7 +308,7 @@ class VertexRDD[@specialized VD: ClassTag](
 
   /** Generates an RDD of vertex attributes suitable for shipping to the edge partitions. */
   private[graphx] def shipVertexAttributes(
-      shipSrc: Boolean, shipDst: Boolean): RDD[(PartitionID, VertexAttributeBlock[VD])] = {
+      shipSrc: Boolean, shipDst: Boolean): RDD[VertexAttributeBlock[VD]] = {
     partitionsRDD.mapPartitions(_.flatMap(_.shipVertexAttributes(shipSrc, shipDst)))
   }
 

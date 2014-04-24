@@ -72,6 +72,57 @@ class VertexIdMsgSerializer extends Serializer with Serializable {
   }
 }
 
+private[graphx]
+class DoubleVertexAttributeBlockSerializer extends Serializer with Serializable {
+  override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
+
+    override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
+      def writeObject[T](t: T) = {
+        val block = t.asInstanceOf[VertexAttributeBlock[Double]]
+        writeInt(block.pid)
+        writeInt(block.vids.length)
+        if (block.vids.length > 0) {
+          writeVarLong(block.vids(0), optimizePositive = false)
+          var i = 1
+          while (i < block.vids.length) {
+            writeVarLong(block.vids(i) - block.vids(i - 1), optimizePositive = true)
+            i += 1
+          }
+        }
+        var i = 0
+        while (i < block.vids.length) {
+          writeDouble(block.attrs(i))
+          i += 1
+        }
+        this
+      }
+    }
+
+    override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
+      override def readObject[T](): T = {
+        val pid = readInt()
+        val length = readInt()
+        val vids = new Array[VertexId](length)
+        val attrs = new Array[Double](length)
+        if (length > 0) {
+          vids(0) = readVarLong(optimizePositive = false)
+          var i = 1
+          while (i < length) {
+            vids(i) = vids(i - 1) + readVarLong(optimizePositive = true)
+            i += 1
+          }
+        }
+        var i = 0
+        while (i < length) {
+          attrs(i) = readDouble()
+          i += 1
+        }
+        new VertexAttributeBlock[Double](pid, vids, attrs).asInstanceOf[T]
+      }
+    }
+  }
+}
+
 /** A special shuffle serializer for VertexBroadcastMessage[Int]. */
 private[graphx]
 class IntVertexBroadcastMsgSerializer extends Serializer with Serializable {
