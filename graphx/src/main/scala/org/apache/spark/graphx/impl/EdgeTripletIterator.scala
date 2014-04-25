@@ -28,7 +28,7 @@ import org.apache.spark.graphx.util.collection.PrimitiveKeyOpenHashMap
  * debug / profile.
  */
 private[impl]
-class EdgeTripletIterator[VD: ClassTag, ED: ClassTag](
+class EdgeTripletIterator[@specialized(Double) VD: ClassTag, ED: ClassTag](
     val edgePartition: EdgePartition[ED, VD],
     val includeSrc: Boolean,
     val includeDst: Boolean)
@@ -51,6 +51,30 @@ class EdgeTripletIterator[VD: ClassTag, ED: ClassTag](
     }
     triplet.attr = edgePartition.data(pos)
     pos += 1
+    triplet
+  }
+}
+
+private[impl]
+class ReusingEdgeTripletIterator[@specialized(Double) VD: ClassTag, ED: ClassTag](
+    val edgeIter: Iterator[Edge[ED]],
+    val edgePartition: EdgePartition[ED, VD],
+    val includeSrc: Boolean,
+    val includeDst: Boolean)
+  extends Iterator[EdgeTriplet[VD, ED]] {
+
+  private val triplet = new EdgeTriplet[VD, ED]
+
+  override def hasNext = edgeIter.hasNext
+
+  override def next() = {
+    triplet.set(edgeIter.next())
+    if (includeSrc) {
+      triplet.srcAttr = edgePartition.vertices(triplet.srcId)
+    }
+    if (includeDst) {
+      triplet.dstAttr = edgePartition.vertices(triplet.dstId)
+    }
     triplet
   }
 }

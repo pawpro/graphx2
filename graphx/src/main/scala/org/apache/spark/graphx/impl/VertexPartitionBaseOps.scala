@@ -31,7 +31,8 @@ import org.apache.spark.graphx.util.collection.PrimitiveKeyOpenHashMap
  * implicit evidence of membership in the `VertexPartitionBaseOpsConstructor` typeclass (for
  * example, [[VertexPartition.VertexPartitionOpsConstructor]]).
  */
-private[graphx] abstract class VertexPartitionBaseOps[VD: ClassTag, T[X] <: VertexPartitionBase[X]]
+private[graphx] abstract class VertexPartitionBaseOps[
+    @specialized(Double) VD: ClassTag, T[X] <: VertexPartitionBase[X]]
     (self: T[VD])
     (implicit ev: VertexPartitionBaseOpsConstructor[T])
   extends Logging {
