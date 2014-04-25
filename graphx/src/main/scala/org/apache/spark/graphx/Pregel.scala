@@ -133,7 +133,8 @@ object Pregel extends Logging {
       // Update the graph with the new vertices.
       prevG = g
       g = g.outerJoinVertices(newVerts) { (vid, old, newOpt) => newOpt.getOrElse(old) }
-      g.cache()
+      g.vertices.cache()
+      // g.vertices will be used twice: in mapReduceTriplets and in innerJoin in the next iteration
 
       val oldMessages = messages
       // Send new messages. Vertices that didn't get any messages don't appear in newVerts, so don't

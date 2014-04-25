@@ -65,7 +65,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
 
   override def unpersistVertices(blocking: Boolean = true): Graph[VD, ED] = {
     vertices.unpersist(blocking)
-    // TODO: unpersist the replicated vertices in `replicatedVertexView` but leave the edges alone
+    replicatedVertexView.edges.unpersist(blocking)
     this
   }
 
