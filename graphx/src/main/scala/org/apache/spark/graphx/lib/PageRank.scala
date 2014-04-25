@@ -76,7 +76,7 @@ object PageRank extends Logging {
    *         containing the normalized weight.
    *
    */
-  def run[VD: ClassTag, ED: ClassTag](
+  def run[@specialized(Double) VD: ClassTag, ED: ClassTag](
       graph: Graph[VD, ED], numIter: Int, resetProb: Double = 0.15, unpersist: Boolean = true)
     : Graph[Double, Double] = {
     // Initialize the pagerankGraph with each edge attribute having
