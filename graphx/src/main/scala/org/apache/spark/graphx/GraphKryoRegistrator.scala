@@ -24,6 +24,7 @@ import org.apache.spark.util.BoundedPriorityQueue
 import org.apache.spark.util.collection.BitSet
 
 import org.apache.spark.graphx.impl._
+import org.apache.spark.graphx.util.collection.PrimitiveKeyOpenHashMap
 
 /**
  * Registers GraphX classes with Kryo for improved performance.
@@ -43,6 +44,7 @@ class GraphKryoRegistrator extends KryoRegistrator {
     kryo.register(classOf[PartitionStrategy])
     kryo.register(classOf[BoundedPriorityQueue[Object]])
     kryo.register(classOf[EdgeDirection])
+    kryo.register(classOf[PrimitiveKeyOpenHashMap[VertexId, Int]])
 
     // This avoids a large number of hash table lookups.
     kryo.setReferences(false)
