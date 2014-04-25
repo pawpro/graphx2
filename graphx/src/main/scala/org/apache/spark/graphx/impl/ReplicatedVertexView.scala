@@ -23,7 +23,6 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.impl.VertexAttributeBlockRDDFunctions._
 
 /**
  * Manages shipping vertex attributes to the edge partitions of an
@@ -65,15 +64,15 @@ class ReplicatedVertexView[VD: ClassTag, ED: ClassTag](
     val shipSrc = includeSrc && !hasSrcId
     val shipDst = includeDst && !hasDstId
     if (shipSrc || shipDst) {
-      val shippedVerts: RDD[VertexAttributeBlock[VD]] =
+      val shippedVerts: RDD[(Int, VertexAttributeBlock[VD])] =
         vertices.shipVertexAttributes(shipSrc, shipDst)
           .setName("ReplicatedVertexView.upgrade(%s, %s) - shippedVerts %s %s (broadcast)".format(
             includeSrc, includeDst, shipSrc, shipDst))
-          .copartitionWithEdges(edges.partitioner.get)
+          .partitionBy(edges.partitioner.get)
       val newEdges = new EdgeRDD(edges.partitionsRDD.zipPartitions(shippedVerts) {
         (ePartIter, shippedVertsIter) => ePartIter.map {
           case (pid, edgePartition) =>
-            (pid, edgePartition.updateVertices(shippedVertsIter.flatMap(_.iterator)))
+            (pid, edgePartition.updateVertices(shippedVertsIter.flatMap(_._2.iterator)))
         }
       })
       edges = newEdges
@@ -110,12 +109,12 @@ class ReplicatedVertexView[VD: ClassTag, ED: ClassTag](
     val shippedVerts = updates.shipVertexAttributes(hasSrcId, hasDstId)
       .setName("ReplicatedVertexView.updateVertices - shippedVerts %s %s (broadcast)".format(
         hasSrcId, hasDstId))
-      .copartitionWithEdges(edges.partitioner.get)
+      .partitionBy(edges.partitioner.get)
 
     val newEdges = new EdgeRDD(edges.partitionsRDD.zipPartitions(shippedVerts) {
       (ePartIter, shippedVertsIter) => ePartIter.map {
         case (pid, edgePartition) =>
-          (pid, edgePartition.updateVertices(shippedVertsIter.flatMap(_.iterator)))
+          (pid, edgePartition.updateVertices(shippedVertsIter.flatMap(_._2.iterator)))
       }
     })
     new ReplicatedVertexView(newEdges, hasSrcId, hasDstId)

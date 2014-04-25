@@ -18,7 +18,6 @@
 package org.apache.spark.graphx.impl
 
 import scala.reflect.ClassTag
-import scala.util.Sorting
 
 import org.apache.spark.Partitioner
 import org.apache.spark.rdd.RDD
@@ -83,22 +82,22 @@ object RoutingTablePartition {
   /** Build a `RoutingTablePartition` from `RoutingTableMessage`s. */
   def fromMsgs(numEdgePartitions: Int, iter: Iterator[RoutingTableMessage])
     : RoutingTablePartition = {
-    val pid2vid = Array.fill(numEdgePartitions)(new PrimitiveVector[(VertexId, Boolean, Boolean)])
+    val pid2vid = Array.fill(numEdgePartitions)(new PrimitiveVector[VertexId])
+    val srcFlags = Array.fill(numEdgePartitions)(new PrimitiveVector[Boolean])
+    val dstFlags = Array.fill(numEdgePartitions)(new PrimitiveVector[Boolean])
     for (msg <- iter) {
-      val srcFlag = (msg.position & 0x1) != 0
-      val dstFlag = (msg.position & 0x2) != 0
-      pid2vid(msg.pid) += (msg.vid, srcFlag, dstFlag)
+      pid2vid(msg.pid) += msg.vid
+      srcFlags(msg.pid) += (msg.position & 0x1) != 0
+      dstFlags(msg.pid) += (msg.position & 0x2) != 0
     }
-    val routingTable = pid2vid.map { vector =>
-      val array = vector.trim().array
-      Sorting.quickSort(array)(Ordering.by[(VertexId, Boolean, Boolean), VertexId](_._1))
-      (array.map(_._1), toBitSet(array.map(_._2)), toBitSet(array.map(_._3)))
-    }
-    new RoutingTablePartition(routingTable)
+
+    new RoutingTablePartition(pid2vid.zipWithIndex.map {
+      case (vids, pid) => (vids.trim().array, toBitSet(srcFlags(pid)), toBitSet(dstFlags(pid)))
+    })
   }
 
   /** Compact the given vector of Booleans into a BitSet. */
-  private def toBitSet(flags: Array[Boolean]): BitSet = {
+  private def toBitSet(flags: PrimitiveVector[Boolean]): BitSet = {
     val bitset = new BitSet(flags.size)
     var i = 0
     while (i < flags.size) {
@@ -114,8 +113,7 @@ object RoutingTablePartition {
 /**
  * Stores the locations of edge-partition join sites for each vertex attribute in a particular
  * vertex partition. This provides routing information for shipping vertex attributes to edge
- * partitions. Each `Array[VertexId]` in `routingTable` must be sorted in increasing order of vertex
- * id.
+ * partitions.
  */
 private[graphx]
 class RoutingTablePartition(
@@ -138,8 +136,7 @@ class RoutingTablePartition(
 
   /**
    * Runs `f` on each vertex id to be sent to the specified edge partition. Vertex ids can be
-   * filtered by the position they have in the edge partition. `f` is guaranteed to be called on
-   * monotonically increasing vertex ids.
+   * filtered by the position they have in the edge partition.
    */
   def foreachWithinEdgePartition
       (pid: PartitionID, includeSrc: Boolean, includeDst: Boolean)

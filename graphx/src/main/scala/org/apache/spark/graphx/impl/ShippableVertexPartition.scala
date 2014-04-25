@@ -17,54 +17,19 @@
 
 package org.apache.spark.graphx.impl
 
-import org.apache.spark.Partitioner
-import org.apache.spark.rdd.ShuffledRDD
-import scala.reflect.{classTag, ClassTag}
+import scala.reflect.ClassTag
 
-import org.apache.spark.rdd.RDD
 import org.apache.spark.util.collection.{BitSet, PrimitiveVector}
 
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.collection.PrimitiveKeyOpenHashMap
 
-/**
- * Stores vertex attributes to ship to an edge partition. For efficient delta encoding, the
- * attributes must be sorted in increasing order of vertex id.
- */
+/** Stores vertex attributes to ship to an edge partition. */
 private[graphx]
-class VertexAttributeBlock[VD: ClassTag](
-    val pid: PartitionID, val vids: Array[VertexId], val attrs: Array[VD])
-  extends Product2[PartitionID, (Array[VertexId], Array[VD])] with Serializable {
-
-  override def _1 = pid
-
-  override def _2 = (vids, attrs)
-
-  override def canEqual(that: Any): Boolean = that.isInstanceOf[VertexAttributeBlock[_]]
-
+class VertexAttributeBlock[VD: ClassTag](val vids: Array[VertexId], val attrs: Array[VD])
+  extends Serializable {
   def iterator: Iterator[(VertexId, VD)] =
     (0 until vids.size).iterator.map { i => (vids(i), attrs(i)) }
-}
-
-private[graphx]
-object VertexAttributeBlockRDDFunctions {
-  import scala.language.implicitConversions
-
-  implicit def rdd2VertexAttributeBlockRDDFunctions[VD: ClassTag](
-      rdd: RDD[VertexAttributeBlock[VD]]) = new VertexAttributeBlockRDDFunctions(rdd)
-}
-
-private[graphx]
-class VertexAttributeBlockRDDFunctions[VD: ClassTag](self: RDD[VertexAttributeBlock[VD]]) {
-  def copartitionWithEdges(partitioner: Partitioner): RDD[VertexAttributeBlock[VD]] = {
-    val rdd = new ShuffledRDD[PartitionID, (Array[VertexId], Array[VD]), VertexAttributeBlock[VD]](
-      self, partitioner)
-
-    if (classTag[VD] == ClassTag.Double) {
-      rdd.setSerializer(new DoubleVertexAttributeBlockSerializer)
-    }
-    rdd
-  }
 }
 
 private[graphx]
@@ -130,7 +95,7 @@ class ShippableVertexPartition[VD: ClassTag](
    * referenced in the specified positions in the edge partition.
    */
   def shipVertexAttributes(
-      shipSrc: Boolean, shipDst: Boolean): Iterator[VertexAttributeBlock[VD]] = {
+      shipSrc: Boolean, shipDst: Boolean): Iterator[(PartitionID, VertexAttributeBlock[VD])] = {
     Iterator.tabulate(routingTable.numEdgePartitions) { pid =>
       val initialSize = if (shipSrc && shipDst) routingTable.partitionSize(pid) else 64
       val vids = new PrimitiveVector[VertexId](initialSize)
@@ -143,7 +108,7 @@ class ShippableVertexPartition[VD: ClassTag](
         }
         i += 1
       }
-      new VertexAttributeBlock(pid, vids.trim().array, attrs.trim().array)
+      (pid, new VertexAttributeBlock(vids.trim().array, attrs.trim().array))
     }
   }
 
