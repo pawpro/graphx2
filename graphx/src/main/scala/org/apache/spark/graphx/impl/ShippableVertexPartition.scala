@@ -117,7 +117,7 @@ class ShippableVertexPartition[VD: ClassTag](
     val values: Array[VD],
     val mask: BitSet,
     val routingTable: RoutingTablePartition)
-  extends VertexPartitionBase[VD] with Serializable {
+  extends VertexPartitionBase[VD] {
 
   /** Return a new ShippableVertexPartition with the specified routing table. */
   def withRoutingTable(routingTable_ : RoutingTablePartition): ShippableVertexPartition[VD] = {

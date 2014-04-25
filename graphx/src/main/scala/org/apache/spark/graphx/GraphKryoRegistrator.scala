@@ -45,10 +45,6 @@ class GraphKryoRegistrator extends KryoRegistrator {
     kryo.register(classOf[BoundedPriorityQueue[Object]])
     kryo.register(classOf[EdgeDirection])
     kryo.register(classOf[PrimitiveKeyOpenHashMap[VertexId, Int]])
-    kryo.register(classOf[VertexSet])
-    kryo.register(classOf[VertexPartition[Object]])
-    kryo.register(classOf[ShippableVertexPartition[Object]])
-    kryo.register(classOf[RoutingTablePartition])
 
     // This avoids a large number of hash table lookups.
     kryo.setReferences(false)

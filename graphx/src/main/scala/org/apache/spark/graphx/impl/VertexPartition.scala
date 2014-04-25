@@ -58,7 +58,7 @@ private[graphx] class VertexPartition[VD: ClassTag](
     val index: VertexIdToIndexMap,
     val values: Array[VD],
     val mask: BitSet)
-  extends VertexPartitionBase[VD] with Serializable
+  extends VertexPartitionBase[VD]
 
 private[graphx] class VertexPartitionOps[VD: ClassTag](self: VertexPartition[VD])
   extends VertexPartitionBaseOps[VD, VertexPartition](self) {
