@@ -150,7 +150,7 @@ object Pregel extends Logging {
         SparkEnv.get.blockManager.shuffleBlockManager.removeAllShuffleStuff()
       }
 
-      logInfo("Pregel finished iteration " + i)
+      logWarning("Pregel finished iteration " + i)
 
       // Unpersist the RDDs hidden by newly-materialized RDDs
       oldMessages.unpersist(blocking=false)

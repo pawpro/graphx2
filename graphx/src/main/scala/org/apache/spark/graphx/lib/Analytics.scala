@@ -127,7 +127,7 @@ object Analytics extends Logging {
         val graph = partitionStrategy.foldLeft(unpartitionedGraph)(_.partitionBy(_))
 
         val cc = ConnectedComponents.run(graph)
-        println("Components: " + cc.vertices.map{ case (vid,data) => data}.distinct())
+        logWarning("Components: " + cc.vertices.map{ case (vid,data) => data}.distinct().count())
         sc.stop()
 
       case "triangles" =>
