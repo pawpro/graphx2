@@ -173,21 +173,25 @@ object Analytics extends Logging {
       case "triangles" =>
         var numEPart = 4
         // TriangleCount requires the graph to be partitioned
-        var partitionStrategy: PartitionStrategy = RandomVertexCut
+        var partitionStrategy: Option[PartitionStrategy] = None
 
         options.foreach{
           case ("numEPart", v) => numEPart = v.toInt
-          case ("partStrategy", v) => partitionStrategy = pickPartitioner(v)
+          case ("partStrategy", v) => partitionStrategy = Some(pickPartitioner(v))
           case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
         }
         println("======================================")
         println("|      Triangle Count                |")
         println("======================================")
         val sc = new SparkContext(host, "TriangleCount(" + fname + ")", conf)
-        val graph = GraphLoader.edgeListFile(sc, fname, canonicalOrientation = true,
-          minEdgePartitions = numEPart).partitionBy(partitionStrategy).cache()
+        val unpartitionedGraph = GraphLoader.edgeListFile(sc, fname, canonicalOrientation = true,
+          minEdgePartitions = numEPart).cache()
+        val graph = partitionStrategy.foldLeft(unpartitionedGraph)(_.partitionBy(_))
+        // val graph = GraphLoader.edgeListFile(sc, fname, canonicalOrientation = true,
+        //   minEdgePartitions = numEPart).partitionBy(partitionStrategy).cache()
+        logWarning(s"Graph has ${graph.vertices.count} vertices")
         val triangles = TriangleCount.run(graph)
-        println("Triangles: " + triangles.vertices.map {
+        logWarning("Triangles: " + triangles.vertices.map {
           case (vid,data) => data.toLong
         }.reduce(_ + _) / 3)
         sc.stop()
