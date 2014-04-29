@@ -158,7 +158,7 @@ object Pregel extends Logging {
       newVerts.unpersist(blocking=false)
       prevG.unpersistVertices(blocking=false)
       // count the iteration
-      logWarning(s"Pregel iteration $i")
+      // logWarning(s"Pregel iteration $i")
       // println(s"Pregel iteration $i")
       i += 1
     }
