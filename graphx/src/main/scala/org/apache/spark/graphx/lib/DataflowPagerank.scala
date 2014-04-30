@@ -52,6 +52,23 @@ object DataflowPagerank extends Logging {
 
     // val sc = new SparkContext(host, "DataflowPagerank(" + fname + ")", conf)
     val sc = new SparkContext(host, "PageRank(" + fname + ")", conf)
+
+    val algo = args(4) match {
+      case "naive" => naiveVersion(sc, fname, partitions, iters)
+      case "optimized" => optimizedSpark(sc, fname, partitions, iters)
+      case "cc" => connectedComponents(sc, fname, partitions)
+      case _ => throw new UnsupportedOperationException
+    }
+
+    sc.stop()
+    
+
+
+    System.exit(0)
+  }
+
+  def optimizedSpark(sc: SparkContext, fname: String, partitions: Int, iters: Int) {
+
     val lines = sc.textFile(fname).repartition(partitions)
     val links: RDD[(Long, Seq[Long])] = lines.map{ s =>
       val parts = s.split("\\s+")
@@ -74,10 +91,96 @@ object DataflowPagerank extends Logging {
     // output.foreach(tup => println(tup._1 + " has rank: " + tup._2 + "."))
     val totalRank = ranks.map{ case(_, r) => r}.reduce(_ + _)
     logWarning(s"Total Pagerank: $totalRank")
-    sc.stop()
-    
+  }
+
+  // For now edge data is arbitrarily a string
+  def naiveVersion(sc: SparkContext, fname: String, partitions: Int, iters: Int) {
+
+    val lines = sc.textFile(fname).repartition(partitions)
+    val edges: RDD[(Long, (Long, Int))] = lines.map{ s =>
+      val parts = s.split("\\s+")
+      (parts(0).toLong, (parts(1).toLong, 1))
+    }
+    val alpha = 0.15
+    val initialRank = 1.0
+    logWarning("Pagerank entered.")
+
+    // get outdegree of each each and make weight 1/outdegree
+    val weightedEdges: RDD[(Long, (Long, Double))] = edges
+      .map { case (src: Long, (dst: Long, _: Int)) => (src, 1.0)}
+      // .reduceByKey((v1, v2) => v1 + v2)
+      .reduceByKey(_ + _)
+      .join(edges)
+      .map{ case (src: Long, (outDegree: Double, (dst: Long, _: Int))) =>
+            (src, (dst, 1.0/outDegree))
+      }.cache()
+
+    // initialize ranks
+    var ranks: RDD[(Long, Double)] = edges.map{ case (src: Long, (dst: Long, _: Int)) => (src, initialRank)}
+      .union(edges.map{ case (src: Long, (dst: Long, _: Int)) => (dst, initialRank)})
+      .distinct()
+
+    logWarning("Starting pagerank iterations")
+    for (i <- 1 to iters) {
+      ranks = weightedEdges.join(ranks)
+        .map {case (src: Long, ((dst: Long, weight: Double), rank: Double)) => (dst, weight*rank)}
+        .reduceByKey(_ + _)
+        .join(ranks)
+        .map { case (id: Long, (incomingRanks: Double, myRank: Double)) => (id, alpha*myRank + (1.0-alpha)*incomingRanks)}
+
+        ranks.count
+        logWarning("Finished iteration: " + i) 
+    }
+    val totalRank = ranks.map{ case(_, r) => r}.reduce(_ + _)
+    logWarning(s"Total Pagerank: $totalRank")
+
+  }
+
+  def connectedComponents(sc: SparkContext, fname: String, partitions: Int) {
+
+    val lines = sc.textFile(fname).repartition(partitions)
+    val edges: RDD[(Long, Long)] = lines.map{ s =>
+      val parts = s.split("\\s+")
+      (parts(0).toLong, parts(1).toLong)
+    }.cache()
+    logWarning("CC started")
 
 
-    System.exit(0)
+    // initialize ccIDs to IDs
+    var ccs: RDD[(Long, Long)] = edges.map{ case (src: Long, (dst: Long, _: Int)) => (src, src)}
+      .union(edges.map{ case (src: Long, (dst: Long, _: Int)) => (dst, dst)})
+      .distinct()
+    var numUpdates = Long.MaxValue
+
+    logWarning("Starting CC iterations")
+    while (numUpdates > 0) {
+
+      val newCCs = edges
+        // get src property
+        .join(ccs)
+        // rekey by dst
+        .map {case (src: Long, (dst: Long, srcCC: Long)) => (dst, (src, srcCC)}
+        // get dst property
+        .join(ccs)
+        // emit min ccId to src and adst
+        .flatMap { case (dst: Long, ((src: Long, srcCC: Long), dstCC)) =>
+            Iterator((src, min(srcCC, dstCC)), (dst, min(srcCC, dstCC)))
+        }
+        .reduceByKey(min(_, _)).cache()
+        // .join(ranks)
+        // .map { case (id: Long, (incomingRanks: Double, myRank: Double)) => (id, alpha*myRank + (1.0-alpha)*incomingRanks)}
+
+      // check for convergence
+      numUpdates = newCCs.join(ccs)
+        .filter{case (vid, (newCC, oldCC)) => newCC != oldCC }.count()
+      ccs = newCCs
+
+
+      logWarning(s"CC iter $i with $numUpdates updates") 
+
+    }
+    val numCCs = ccs.map{ case(_, id) => id}.distinct().count()
+    logWarning(s"Num connected components: $numCCs")
+
   }
 }
