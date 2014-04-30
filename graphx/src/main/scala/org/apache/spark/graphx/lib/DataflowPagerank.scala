@@ -216,9 +216,9 @@ object DataflowPagerank extends Logging {
         // emit min ccId to src and adst
         .flatMap { case (dst: Long, ((src: Long, srcCC: Long), dstCC)) =>
             if (srcCC < dstCC)  {
-              Iterator(dst, srcCC)
+              Iterator((dst, srcCC))
             } else if (dstCC < srcCC) {
-              Iterator(src, dstCC)
+              Iterator((src, dstCC))
             } else {
               Iterator.empty
             }

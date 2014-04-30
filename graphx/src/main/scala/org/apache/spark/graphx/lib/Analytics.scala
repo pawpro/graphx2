@@ -165,7 +165,7 @@ object Analytics extends Logging {
         val graph = partitionStrategy.foldLeft(unpartitionedGraph)(_.partitionBy(_))
 
         logWarning("Starting kcore")
-        val result = KCore.run(graph, kmax, kmin)
+        val result = KCoreFast.run(graph, kmax, kmin)
 
         logWarning("Size of cores: " + result.vertices.map { case (vid,data) => (min(data, kmax), 1) }.reduceByKey((_+_)).collect().mkString(", "))
         sc.stop()
