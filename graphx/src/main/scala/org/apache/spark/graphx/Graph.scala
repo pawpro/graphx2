@@ -78,6 +78,8 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    */
   val triplets: RDD[EdgeTriplet[VD, ED]]
 
+  val storageLevel: StorageLevel
+
   /**
    * Caches the vertices and edges associated with this graph at the specified storage level.
    *

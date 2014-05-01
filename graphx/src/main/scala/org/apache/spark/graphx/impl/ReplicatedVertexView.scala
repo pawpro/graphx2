@@ -21,6 +21,7 @@ import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.collection.{PrimitiveVector, OpenHashSet}
 
 import org.apache.spark.graphx._
@@ -42,6 +43,7 @@ class ReplicatedVertexView[VD: ClassTag](
     updatedVerts: VertexRDD[VD],
     edges: EdgeRDD[_],
     routingTable: RoutingTable,
+    storageLevel: StorageLevel,
     prevViewOpt: Option[ReplicatedVertexView[VD]] = None,
     destructive: Boolean = false) {
 
@@ -63,7 +65,7 @@ class ReplicatedVertexView[VD: ClassTag](
             vidToIndex.add(e.dstId)
           }
           (pid, vidToIndex)
-      }, preservesPartitioning = true).cache().setName("ReplicatedVertexView localVertexIdMap")
+      }, preservesPartitioning = true).persist(storageLevel).setName("ReplicatedVertexView localVertexIdMap")
   }
 
   private lazy val bothAttrs: RDD[(PartitionID, VertexPartition[VD])] = create(true, true)
@@ -141,7 +143,7 @@ class ReplicatedVertexView[VD: ClassTag](
             } else {
               Iterator.empty
             }
-        }.cache().setName("ReplicatedVertexView delta %s %s".format(includeSrc, includeDst))
+        }.persist(storageLevel).setName("ReplicatedVertexView delta %s %s".format(includeSrc, includeDst))
 
       case None =>
         // Within each edge partition, place the shipped vertex attributes into the correct
@@ -166,7 +168,7 @@ class ReplicatedVertexView[VD: ClassTag](
           } else {
             Iterator.empty
           }
-        }.cache().setName("ReplicatedVertexView %s %s".format(includeSrc, includeDst))
+        }.persist(storageLevel).setName("ReplicatedVertexView %s %s".format(includeSrc, includeDst))
     }
   }
 }

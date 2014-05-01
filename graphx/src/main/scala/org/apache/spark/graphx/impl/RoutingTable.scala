@@ -30,7 +30,7 @@ import org.apache.spark.util.collection.PrimitiveVector
  * (possibly) once to ship the active-set information.
  */
 private[impl]
-class RoutingTable(edges: EdgeRDD[_], vertices: VertexRDD[_]) {
+class RoutingTable(edges: EdgeRDD[_], vertices: VertexRDD[_], storageLevel: StorageLevel) {
 
   val bothAttrs: RDD[Array[Array[VertexId]]] = createPid2Vid(true, true)
   val srcAttrOnly: RDD[Array[Array[VertexId]]] = createPid2Vid(true, false)
@@ -81,6 +81,6 @@ class RoutingTable(edges: EdgeRDD[_], vertices: VertexRDD[_]) {
       }
 
       Iterator(pid2vid.map(_.trim().array))
-    }.cache().setName("RoutingTable %s %s".format(includeSrcAttr, includeDstAttr))
+    }.persist(storageLevel).setName("RoutingTable %s %s".format(includeSrcAttr, includeDstAttr))
   }
 }

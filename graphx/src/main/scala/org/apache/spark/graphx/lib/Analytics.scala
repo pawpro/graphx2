@@ -18,10 +18,11 @@
 package org.apache.spark.graphx.lib
 
 import org.apache.spark._
+import org.apache.spark.SparkContext._
 import scala.math._
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.PartitionStrategy._
-import org.apache.spark.SparkContext._
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Driver program for running graph algorithms.
@@ -81,7 +82,7 @@ object Analytics extends Logging {
         val sc = new SparkContext(host, "PageRank(" + fname + ")", conf)
 
         val unpartitionedGraph = GraphLoader.edgeListFile(sc, fname,
-          minEdgePartitions = numEPart).cache()
+          minEdgePartitions = numEPart, storageLevel = StorageLevel.MEMORY_AND_DISK_2).cache()
         val graph = partitionStrategy.foldLeft(unpartitionedGraph)(_.partitionBy(_))
 
         println("GRAPHX: Number of vertices " + graph.vertices.count)
@@ -90,7 +91,7 @@ object Analytics extends Logging {
         val pr = (numIterOpt match {
           case Some(numIter) => PageRank.run(graph, numIter, unpersist = unpersist)
           case None => PageRank.runUntilConvergence(graph, tol)
-        }).vertices.cache()
+        }).vertices.persist(StorageLevel.MEMORY_AND_DISK_2)
 
         println("GRAPHX: Total rank: " + pr.map(_._2).reduce(_ + _))
 
@@ -156,7 +157,7 @@ object Analytics extends Logging {
           logWarning("kmax must be greater than or equal to kmin")
           sys.exit(1)
         }
-        
+
         println("======================================")
         println("|               KCORE                 |")
         println("======================================")
