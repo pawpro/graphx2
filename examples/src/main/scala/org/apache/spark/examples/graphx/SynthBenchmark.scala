@@ -54,6 +54,7 @@ object SynthBenchmark {
         }
     }
 
+    var master = "local"
     var app = "pagerank"
     var niter = 10
     var numVertices = 100000
@@ -64,6 +65,7 @@ object SynthBenchmark {
     var degFile: String = ""
 
     options.foreach {
+      case ("master", v) => master = v
       case ("app", v) => app = v
       case ("niter", v) => niter = v.toInt
       case ("nverts", v) => numVertices = v.toInt
@@ -76,6 +78,7 @@ object SynthBenchmark {
     }
 
     val conf = new SparkConf()
+      .setMaster(master)
       .setAppName(s"GraphX Synth Benchmark (nverts = $numVertices, app = $app)")
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
       .set("spark.kryo.registrator", "org.apache.spark.graphx.GraphKryoRegistrator")
